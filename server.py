@@ -1,64 +1,41 @@
-from flask import Flask, request, jsonify, send_file
-from util import get_location, estimate_price, load_details
+import streamlit as st
 import os
+from util import get_location, estimate_price, load_details
 
-app = Flask(__name__)
-
-def add_cors_headers(response):
-    """Add CORS headers to the response."""
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return response
-
-@app.route('/')
-def serve_html():
-    """Serve the frontend HTML."""
-    try:
-        response = send_file('app.html')
-        return add_cors_headers(response)
-    except Exception as e:
-        return add_cors_headers(jsonify({'error': str(e)})), 500
-
-@app.route("/get_location")
-def getloc():
-    """Return available locations."""
-    try:
-        response = jsonify({'locations': get_location()})
-        return add_cors_headers(response)
-    except Exception as e:
-        return add_cors_headers(jsonify({'error': str(e)})), 500
-
-@app.route("/predict", methods=['POST'])
-def predict_price():
-    """Predict house price based on input parameters."""
-    try:
-        total_sqft = float(request.form['total_sqft'])
-        location = request.form['location']
-        bhk = int(request.form['bhk'])
-        bath = int(request.form['bath'])
-        estimated_price = estimate_price(location, total_sqft, bhk, bath)
-        if estimated_price is not None:
-            response = jsonify({'estimated_price': estimated_price})
-            return add_cors_headers(response)
-        return add_cors_headers(jsonify({'error': 'Invalid input or prediction failed'})), 400
-    except KeyError as e:
-        return add_cors_headers(jsonify({'error': f'Missing parameter: {str(e)}'})), 400
-    except ValueError as e:
-        return add_cors_headers(jsonify({'error': f'Invalid parameter value: {str(e)}'})), 400
-    except Exception as e:
-        return add_cors_headers(jsonify({'error': str(e)})), 500
-
-@app.route("/predict", methods=['OPTIONS'])
-def predict_options():
-    """Handle CORS preflight requests."""
-    response = jsonify({'status': 'OK'})
-    return add_cors_headers(response)
-
-if __name__ == "__main__":
-    print("Starting Flask server...")
-    if not os.path.exists(r'home_prices_model_new.pickle') or not os.path.exists(r'columns_new.json'):
-        print("Error: Model or columns file missing. Run train.py first.")
+# Initialize the app and load model details
+st.title("House Price Prediction")
+try:
+    if not os.path.exists('MultipleFiles/home_prices_model_new.pickle') or not os.path.exists('MultipleFiles/columns_new.json'):
+        st.error("Model or columns file missing. Please ensure 'home_prices_model_new.pickle' and 'columns_new.json' are present.")
     else:
         load_details()
-        app.run(debug=True, port=5000)
+except Exception as e:
+    st.error(f"Error loading model: {str(e)}")
+    st.stop()
+
+# Create input fields
+locations = get_location()
+location = st.selectbox("Select Location", options=locations, index=0)
+total_sqft = st.number_input("Total Square Feet", min_value=300.0, max_value=10000.0, value=1000.0, step=10.0)
+bhk = st.number_input("Number of Bedrooms (BHK)", min_value=1, max_value=10, value=2, step=1, format="%d")
+bath = st.number_input("Number of Bathrooms", min_value=1, max_value=10, value=2, step=1, format="%d")
+
+# Predict button
+if st.button("Predict Price"):
+    try:
+        estimated_price = estimate_price(location, total_sqft, bath, bhk)
+        if estimated_price is not None:
+            st.success(f"Estimated House Price: ₹ {estimated_price:.2f} Lakhs")
+        else:
+            st.error("Prediction failed. Please check your inputs.")
+    except Exception as e:
+        st.error(f"Error during prediction: {str(e)}")
+
+# Instructions
+st.markdown("""
+### Instructions
+1. Select the location from the dropdown.
+2. Enter the total square footage of the house.
+3. Specify the number of bedrooms (BHK) and bathrooms.
+4. Click the 'Predict Price' button to get the estimated price.
+""")
